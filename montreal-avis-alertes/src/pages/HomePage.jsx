@@ -1,10 +1,11 @@
+// src/pages/HomePage.jsx
 import React, { useState, useEffect } from 'react';
 import styled from 'styled-components';
 import SearchBar from '../home/SearchBar';
 import Filters from '../home/Filters';
 import AlertsList from '../home/AlertsList';
-import { alerts } from '../data/mockData';
-import { filterAlerts } from '../utils/filterUtils';
+import { fetchAlerts } from '../utils/api';
+import { getAlerts, storeAlertsLocally, isDataStale } from '../utils/offlineManager';
 
 const HomeContainer = styled.div`
   max-width: 1200px;
@@ -40,44 +41,144 @@ const ContentGrid = styled.div`
   }
 `;
 
+const OfflineWarning = styled.div`
+  background-color: #fff3cd;
+  color: #856404;
+  padding: ${({ theme }) => theme.spacing.md};
+  border-radius: ${({ theme }) => theme.borderRadius.small};
+  margin-bottom: ${({ theme }) => theme.spacing.md};
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+`;
+
 const HomePage = () => {
   const [searchTerm, setSearchTerm] = useState('');
+  const [allAlerts, setAllAlerts] = useState([]);
+  const [filteredAlerts, setFilteredAlerts] = useState([]);
+  const [visibleAlerts, setVisibleAlerts] = useState([]);
+  const [visibleCount, setVisibleCount] = useState(5);
+  const [loading, setLoading] = useState(true);
+  const [isOffline, setIsOffline] = useState(!navigator.onLine);
+  const [dataStale, setDataStale] = useState(false);
+  
   const [filters, setFilters] = useState({
-    arrondissement: 'Tous les arrondissements',
-    subject: 'Tous les sujets',
+    arrondissements: ['Tous les arrondissements'],
+    subjects: ['Tous les sujets'],
     startDate: '',
     endDate: '',
   });
-  const [filteredAlerts, setFilteredAlerts] = useState(alerts);
-  const [visibleAlerts, setVisibleAlerts] = useState([]);
-  const [visibleCount, setVisibleCount] = useState(5);
 
+  // Vérifier l'état de la connexion
   useEffect(() => {
-    const filtered = filterAlerts(alerts, { ...filters, searchTerm });
-    setFilteredAlerts(filtered);
-    setVisibleCount(5);
-  }, [filters, searchTerm]);
+    const handleOnline = () => setIsOffline(false);
+    const handleOffline = () => setIsOffline(true);
+    
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+    
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+    };
+  }, []);
 
+  // Charger les données depuis l'API ou le cache
+  useEffect(() => {
+    const loadAlerts = async () => {
+      try {
+        setLoading(true);
+        
+        // Vérifier si les données sont périmées
+        const stale = isDataStale();
+        setDataStale(stale);
+        
+        // Récupérer les données
+        const data = await getAlerts();
+        
+        // Si en ligne et données périmées, mettre à jour le cache
+        if (navigator.onLine && stale) {
+          storeAlertsLocally();
+        }
+        
+        setAllAlerts(data);
+        setFilteredAlerts(data);
+        setLoading(false);
+      } catch (error) {
+        console.error("Erreur lors du chargement des alertes:", error);
+        setLoading(false);
+      }
+    };
+    
+    loadAlerts();
+  }, [isOffline]);
+
+  // Appliquer les filtres et la recherche
+  useEffect(() => {
+    let result = [...allAlerts];
+    
+    // Appliquer le filtre de recherche
+    if (searchTerm) {
+      result = result.filter(alert => 
+        alert.title.toLowerCase().includes(searchTerm.toLowerCase())
+      );
+    }
+    
+    // Appliquer le filtre d'arrondissement
+    if (!filters.arrondissements.includes('Tous les arrondissements')) {
+      result = result.filter(alert => 
+        filters.arrondissements.includes(alert.arrondissement)
+      );
+    }
+    
+    // Appliquer le filtre de sujet
+    if (!filters.subjects.includes('Tous les sujets')) {
+      result = result.filter(alert => 
+        filters.subjects.includes(alert.subject)
+      );
+    }
+    
+    // Appliquer le filtre de date de début
+    if (filters.startDate) {
+      const startDate = new Date(filters.startDate);
+      result = result.filter(alert => 
+        new Date(alert.date) >= startDate
+      );
+    }
+    
+    // Appliquer le filtre de date de fin
+    if (filters.endDate) {
+      const endDate = new Date(filters.endDate);
+      endDate.setHours(23, 59, 59);
+      result = result.filter(alert => 
+        new Date(alert.date) <= endDate
+      );
+    }
+    
+    setFilteredAlerts(result);
+    setVisibleCount(5); // Réinitialiser la pagination
+  }, [allAlerts, searchTerm, filters]);
+
+  // Mettre à jour les alertes visibles (pagination)
   useEffect(() => {
     setVisibleAlerts(filteredAlerts.slice(0, visibleCount));
   }, [filteredAlerts, visibleCount]);
 
-  const handleSearch = () => {
-    const filtered = filterAlerts(alerts, { ...filters, searchTerm });
-    setFilteredAlerts(filtered);
-    setVisibleCount(5);
+  const handleSearch = (e) => {
+    if (e) e.preventDefault();
+    // La recherche est déjà appliquée via useEffect
   };
-
+  
   const resetFilters = () => {
     setFilters({
-      arrondissement: 'Tous les arrondissements',
-      subject: 'Tous les sujets',
+      arrondissements: ['Tous les arrondissements'],
+      subjects: ['Tous les sujets'],
       startDate: '',
       endDate: '',
     });
     setSearchTerm('');
   };
-
+  
   const loadMore = () => {
     setVisibleCount(prevCount => prevCount + 5);
   };
@@ -88,6 +189,15 @@ const HomePage = () => {
       <PageIntro>
         Avis d'ébullition d'eau, travaux, fermeture de rue, nous vous informons sur des situations qui ont un impact sur votre quotidien. Consultez la liste des avis et alertes en cours.
       </PageIntro>
+      
+      {(isOffline || dataStale) && (
+        <OfflineWarning>
+          {isOffline ? 
+            "Vous êtes en mode hors-ligne. Les données affichées peuvent ne pas être à jour." :
+            "Les données affichées peuvent être obsolètes. Actualisez la page pour les mettre à jour."
+          }
+        </OfflineWarning>
+      )}
       
       <SearchBar 
         searchTerm={searchTerm}
@@ -105,6 +215,9 @@ const HomePage = () => {
         <AlertsList 
           alerts={visibleAlerts}
           loadMore={loadMore}
+          hasMore={visibleAlerts.length < filteredAlerts.length}
+          loading={loading}
+          totalCount={filteredAlerts.length}
         />
       </ContentGrid>
     </HomeContainer>

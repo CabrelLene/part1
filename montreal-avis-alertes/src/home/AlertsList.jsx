@@ -1,20 +1,36 @@
+// src/components/home/AlertsList.jsx
 import React from 'react';
 import styled from 'styled-components';
 import AlertCard from './AlertCard';
 
-const ListContainer = styled.div`
-  margin-top: ${({ theme }) => theme.spacing.lg};
+const AlertsContainer = styled.div`
+  background-color: ${({ theme }) => theme.colors.white};
+  padding: ${({ theme }) => theme.spacing.lg};
+  border-radius: ${({ theme }) => theme.borderRadius.medium};
+  box-shadow: ${({ theme }) => theme.shadows.small};
 `;
 
-const AlertsCount = styled.div`
+const AlertsHeader = styled.div`
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
   margin-bottom: ${({ theme }) => theme.spacing.lg};
-  font-size: ${({ theme }) => theme.fontSizes.regular};
-  color: ${({ theme }) => theme.colors.darkGray};
 `;
 
-const EmptyState = styled.div`
+const AlertsTitle = styled.h2`
+  font-size: ${({ theme }) => theme.fontSizes.large};
+  color: ${({ theme }) => theme.colors.secondary};
+  margin: 0;
+`;
+
+const AlertsCount = styled.span`
+  color: ${({ theme }) => theme.colors.darkGray};
+  font-size: ${({ theme }) => theme.fontSizes.small};
+`;
+
+const NoResults = styled.p`
   text-align: center;
-  padding: ${({ theme }) => theme.spacing.xl} 0;
+  padding: ${({ theme }) => theme.spacing.xl};
   color: ${({ theme }) => theme.colors.darkGray};
 `;
 
@@ -22,13 +38,13 @@ const LoadMoreButton = styled.button`
   background-color: transparent;
   color: ${({ theme }) => theme.colors.primary};
   border: 1px solid ${({ theme }) => theme.colors.primary};
-  padding: ${({ theme }) => theme.spacing.sm} ${({ theme }) => theme.spacing.xl};
+  padding: ${({ theme }) => theme.spacing.sm} ${({ theme }) => theme.spacing.lg};
   font-size: ${({ theme }) => theme.fontSizes.regular};
   font-weight: 600;
   border-radius: ${({ theme }) => theme.borderRadius.small};
   cursor: pointer;
-  margin: ${({ theme }) => theme.spacing.lg} auto;
-  display: block;
+  margin-top: ${({ theme }) => theme.spacing.lg};
+  width: 100%;
   transition: all 0.2s;
   
   &:hover {
@@ -37,32 +53,32 @@ const LoadMoreButton = styled.button`
   }
 `;
 
-const AlertsList = ({ alerts, loadMore }) => {
-  if (alerts.length === 0) {
-    return (
-      <EmptyState>
-        <h3>Aucun avis ou alerte trouvé</h3>
-        <p>Veuillez modifier vos critères de recherche pour voir les résultats.</p>
-      </EmptyState>
-    );
-  }
-
+const AlertsList = ({ alerts, loading, hasMore, loadMore, totalCount }) => {
   return (
-    <ListContainer>
-      <AlertsCount>
-        <strong>{alerts.length}</strong> avis et alertes trouvés
-      </AlertsCount>
+    <AlertsContainer>
+      <AlertsHeader>
+        <AlertsTitle>Avis et alertes</AlertsTitle>
+        <AlertsCount>{totalCount || 0} résultats</AlertsCount>
+      </AlertsHeader>
       
-      {alerts.map(alert => (
-        <AlertCard key={alert.id} alert={alert} />
-      ))}
-      
-      {alerts.length >= 5 && (
-        <LoadMoreButton onClick={loadMore}>
-          Charger plus d'alertes
-        </LoadMoreButton>
+      {loading && alerts.length === 0 ? (
+        <NoResults>Chargement des alertes...</NoResults>
+      ) : alerts.length === 0 ? (
+        <NoResults>Aucun avis ou alerte trouvé avec ces critères</NoResults>
+      ) : (
+        <>
+          {alerts.map(alert => (
+            <AlertCard key={alert.id} alert={alert} />
+          ))}
+          
+          {hasMore && (
+            <LoadMoreButton onClick={loadMore}>
+              Voir plus d'alertes
+            </LoadMoreButton>
+          )}
+        </>
       )}
-    </ListContainer>
+    </AlertsContainer>
   );
 };
 
